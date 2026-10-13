@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Трафик у двери</title>
+<meta name="description" content="Помещения до 70 м² на 1-м этаже в Москве, отсортированные по модельному пешеходному потоку у двери.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#eceff1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11161b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Трафик">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<style>
+/* Layout: phone-first single column of ranked address cards; on wide screens a sticky left rail (map + filters) beside the list. */
+:root {
+  --bg: #eceff1;          /* wet asphalt, light */
+  --surface: #fbfcfc;
+  --ink: #16202a;
+  --muted: #5d6b78;
+  --line: #d3d9de;
+  --accent: #d9420b;      /* signal orange: traffic heat */
+  --accent-soft: #fbe3d6;
+  --metro: #c8102e;
+  --bus: #1f6fb2;
+  --shop: #2f8a57;
+  --warn: #9a5b00;
+  --warn-soft: #fff1d6;
+  --ok: #2f7d4f;
+  --chip: #e3e8ec;
+  --tiles: none;
+  --f-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --f-body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #19212a; --ink: #e6ebef; --muted: #93a1ae; --line: #2a3541;
+    --accent: #ff7a3d; --accent-soft: #3a2116; --metro: #ff5a6e; --bus: #5aa7ec; --shop: #5cc58a;
+    --warn: #ffbf5a; --warn-soft: #3a2c12; --ok: #6fd39a; --chip: #24303b; color-scheme: dark;
+    --tiles: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.6);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #19212a; --ink: #e6ebef; --muted: #93a1ae; --line: #2a3541;
+  --accent: #ff7a3d; --accent-soft: #3a2116; --metro: #ff5a6e; --bus: #5aa7ec; --shop: #5cc58a;
+  --warn: #ffbf5a; --warn-soft: #3a2c12; --ok: #6fd39a; --chip: #24303b; color-scheme: dark;
+  --tiles: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.6);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); padding-block: calc(env(safe-area-inset-top, 0px) + 18px) 60px; }
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: grid; gap: 6px; margin-bottom: 14px; }
+h1 { font: 700 clamp(22px, 5.5vw, 34px)/1.1 var(--f-display); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h1 .dot { color: var(--accent); }
+.meta { color: var(--muted); font-size: 13px; }
+.meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; gap: 16px; }
+@media (min-width: 900px) {
+  .layout { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+  .rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+}
+.rail { display: grid; gap: 12px; min-width: 0; }
+@media (min-width: 900px) { #map { aspect-ratio: 1.15; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.panel h2 { font: 600 11px/1 var(--f-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+#map { width: 100%; aspect-ratio: 1.7; max-width: 100%; display: block; border-radius: 6px; background: var(--bg); touch-action: manipulation; position: relative; z-index: 0; isolation: isolate; overflow: hidden; }
+canvas#map { cursor: crosshair; }
+#map.leaflet-container { font: 12px/1.3 var(--f-body); background: var(--bg); }
+#map .leaflet-tile-pane { filter: var(--tiles); }
+#map .leaflet-control-attribution { font-size: 10px; background: color-mix(in srgb, var(--surface) 80%, transparent); color: var(--muted); }
+#map .leaflet-control-attribution a { color: var(--muted); }
+#map .leaflet-bar a { background: var(--surface); color: var(--ink); border-bottom-color: var(--line); }
+#map .leaflet-tooltip { background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 8px rgb(0 0 0 / .15); font-size: 12px; }
+#map .leaflet-tooltip-top::before { border-top-color: var(--surface); }
+.legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; gap: 8px; }
+.ramp { flex: 1; height: 6px; border-radius: 3px; align-self: center; background: linear-gradient(90deg, var(--line), var(--accent)); }
+
+.filters { display: grid; gap: 10px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button, .chipbtn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 11px;
+  font-size: 13px; cursor: pointer; line-height: 1.2;
+}
+.seg button[aria-pressed="true"], .chipbtn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row label { font-size: 13px; color: var(--muted); }
+input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+select { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+
+.list { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-width: 0; scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.card.hl { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.card.st-reject { opacity: 0.55; }
+.head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.rank { font: 700 13px/1 var(--f-data); color: var(--muted); padding-top: 4px; min-width: 2.2em; }
+.addr { font-weight: 600; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
+.sub { color: var(--muted); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.flow { text-align: right; }
+.flow .n { font: 700 22px/1 var(--f-display); color: var(--accent); font-variant-numeric: tabular-nums; }
+.flow .u { font-size: 11px; color: var(--muted); display: block; margin-top: 3px; }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--chip); }
+.bar span { display: block; height: 100%; }
+.bar .m { background: var(--metro); } .bar .b { background: var(--bus); } .bar .s { background: var(--shop); }
+.split { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.split i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--chip); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.good { color: var(--ok); }
+.chip.bp { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.offers { display: grid; gap: 6px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 13px; }
+.offer .o1 { overflow-wrap: anywhere; }
+.offer .o2 { text-align: right; white-space: nowrap; }
+.offer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.offer a:hover { text-decoration: underline; }
+details.desc summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details.desc p { margin: 6px 0 0; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
+.actions { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.status { display: flex; flex-wrap: wrap; gap: 6px; }
+.status button { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+.status button[aria-pressed="true"][data-s="call"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.status button[aria-pressed="true"][data-s="seen"] { background: var(--bus); border-color: var(--bus); color: #fff; }
+.status button[aria-pressed="true"][data-s="fav"] { background: var(--ok); border-color: var(--ok); color: #fff; }
+.status button[aria-pressed="true"][data-s="reject"] { background: var(--muted); border-color: var(--muted); color: var(--surface); }
+.links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; align-items: center; }
+.links a { color: var(--ink); }
+.links .measure { margin-left: auto; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 8px; padding: 5px 10px; cursor: pointer; font-weight: 600; }
+.links .onmap { border: 0; background: none; padding: 0; text-decoration: underline; cursor: pointer; font-size: 13px; color: var(--ink); }
+.totop { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 1500; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 10px 14px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgb(0 0 0 / .18); cursor: pointer; }
+.totop[hidden] { display: none; }
+.note { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 9px; font-size: 16px; }
+@media (min-width: 900px) { .note { font-size: 13px; } }
+.counts { font-size: 12px; color: var(--muted); }
+.counts b { color: var(--ink); }
+.more { justify-self: center; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+.empty { color: var(--muted); padding: 24px 4px; text-align: center; }
+.sync { font-size: 12px; color: var(--muted); }
+.store { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.store .seg button { border-radius: 8px; }
+
+/* counter overlay */
+.ov[hidden] { display: none; }
+.ov { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: grid; grid-template-rows: auto 1fr auto; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px); gap: 12px; }
+.ov h3 { margin: 0; font: 600 15px/1.3 var(--f-body); }
+.ov .t { font: 600 13px var(--f-data); color: var(--muted); }
+.tap { border: 0; border-radius: 18px; background: var(--accent); color: #fff; font: 700 clamp(56px, 22vw, 120px)/1 var(--f-display); touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+.tap small { display: block; font: 500 14px var(--f-body); opacity: .85; margin-top: 10px; }
+.ovbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.ovbar button { flex: 1; min-width: 90px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 12px; cursor: pointer; font-weight: 600; }
+.ovbar .save { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.rate { font: 600 14px var(--f-body); color: var(--muted); }
+
+details.method { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+details.method summary { cursor: pointer; font-weight: 600; }
+details.method p, details.method li { font-size: 14px; max-width: 68ch; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: box-shadow .2s, border-color .2s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Трафик у двери<span class="dot">.</span></h1>
+    <div class="meta" id="meta">Загружаю подборку…</div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail">
+      <div class="panel">
+        <h2>Карта: лучшие адреса</h2>
+        <div id="map" role="region" aria-label="Карта Москвы с отобранными адресами"></div>
+        <div class="legend"><span>ниже в рейтинге</span><span class="ramp"></span><span>выше</span></div>
+      </div>
+      <div class="panel filters">
+        <h2>Отбор</h2>
+        <div class="seg" role="group" aria-label="Сортировка">
+          <button type="button" id="sort-flow" aria-pressed="true">По трафику</button>
+          <button type="button" id="sort-cost" aria-pressed="false">₽ за 1000 прохожих</button>
+        </div>
+        <div class="row">
+          <label for="area">Площадь до</label>
+          <input type="range" id="area" min="5" max="70" step="5" value="70">
+          <span class="num" id="area-v">70 м²</span>
+        </div>
+        <div class="row">
+          <label for="cat">Тип</label>
+          <select id="cat">
+            <option value="">все</option>
+            <option value="торговое">торговое</option>
+            <option value="свободного">свободного назначения</option>
+          </select>
+          <label for="st">Статус</label>
+          <select id="st">
+            <option value="">все, кроме отказа</option>
+            <option value="new">новые</option>
+            <option value="fav">избранные</option>
+            <option value="call">звонить</option>
+            <option value="seen">смотрел</option>
+            <option value="reject">отказ</option>
+            <option value="any">все вместе с отказами</option>
+          </select>
+        </div>
+        <div class="seg">
+          <button type="button" class="chipbtn" id="no-mall" aria-pressed="false">Без входа изнутри ТЦ/БЦ</button>
+          <button type="button" class="chipbtn" id="no-yard" aria-pressed="true">Без входа со двора</button>
+        </div>
+        <div class="store">
+          <div class="sync" id="sync">Статусы: загружаю…</div>
+          <div class="seg">
+            <button type="button" id="export">Экспорт</button>
+            <button type="button" id="import">Импорт</button>
+            <input type="file" id="import-file" accept="application/json,.json" hidden>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="list" id="list" aria-live="polite">
+      <div class="empty">Загружаю адреса…</div>
+    </main>
+  </div>
+
+  <details class="method" style="margin-top:18px">
+    <summary>Как считается трафик</summary>
+    <ul>
+      <li><b>Поток у двери</b> — модельная оценка, сколько человек в сутки проходит по тротуару вдоль фасада здания (берётся самый загруженный отрезок в 20 м от здания).</li>
+      <li><b>Метро:</b> реальный пассажиропоток станций (входы + выходы, data.mos.ru, 2-й квартал 2026). 60% пассажиров считаются пешими; они распределяются от выходов метро по тротуарам к домам, офисам, магазинам, кафе, вузам и больницам, с учётом расстояния.</li>
+      <li><b>Остановки:</b> жители ближайших домов идут к ближайшей остановке (до 600 м).</li>
+      <li><b>Магазины у дома:</b> жители идут к ближайшим сетевым магазинам, аптекам и пунктам выдачи (до 1 км).</li>
+      <li>Данные о домах, тротуарах, магазинах и выходах метро — OpenStreetMap на 11.10.2026.</li>
+      <li>Модель хорошо сравнивает места между собой, но абсолютные числа занижены: в ней нет туристов, транзита и пересадок. Перед решением сделайте замер на месте — кнопка «Замер» на карточке.</li>
+      <li><b>BestPlace</b> — цифра пешеходного трафика из отчёта в карточке объявления на Авито (чел/час), если она там была. Это независимая проверка модели.</li>
+      <li>Для помещений в ТЦ и БЦ без отдельного входа модель показывает поток на улице у здания, а не внутри. Если у помещения свой вход с улицы, предупреждения нет.</li>
+      <li>«Вход со двора» и «подвал» определяются по тексту объявления; такие места получают половину оценки.</li>
+      <li>Статусы, заметки и замеры хранятся только в этом браузере. Чтобы перенести их на другое устройство, нажмите «Экспорт» здесь и «Импорт» там; при импорте у каждого адреса остаётся более свежая версия, замеры объединяются.</li>
+    </ul>
+  </details>
+</div>
+
+<button type="button" class="totop" id="totop" hidden>↑ Карта</button>
+
+<div class="ov" id="ov" hidden>
+  <div>
+    <h3 id="ov-addr">Замер</h3>
+    <div class="t"><span id="ov-time">00:00</span> · <span class="rate" id="ov-rate">—</span></div>
+  </div>
+  <button type="button" class="tap" id="ov-tap"><span id="ov-n">0</span><small>нажимайте на каждого прохожего</small></button>
+  <div class="ovbar">
+    <button type="button" id="ov-undo">−1</button>
+    <button type="button" id="ov-cancel">Отмена</button>
+    <button type="button" class="save" id="ov-save">Сохранить замер</button>
+  </div>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+  const STATUS = [["fav", "★ Избранное"], ["call", "Звонить"], ["seen", "Смотрел"], ["reject", "Отказ"]];
+  const PAGE = 40;
+  const MARKS_KEY = "tud-marks-v1";
+  const S = { data: null, places: [], marks: {}, sort: "flow", areaMax: 70, cat: "", st: "", noMall: false, noYard: true, shown: PAGE, hl: null };
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => (n == null ? "—" : Math.round(n).toLocaleString("ru-RU"));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  try { const v = JSON.parse(localStorage.getItem("tud-filters") || "null"); if (v) Object.assign(S, v, { shown: PAGE }); } catch (e) {}
+  function saveFilters() { try { localStorage.setItem("tud-filters", JSON.stringify({ sort: S.sort, areaMax: S.areaMax, cat: S.cat, st: S.st, noMall: S.noMall, noYard: S.noYard })); } catch (e) {} }
+
+  function minPrice(p) { let m = null; for (const o of p.offers) if (o.price && (m == null || o.price < m)) m = o.price; return m; }
+  function costPer1000(p) { const pr = minPrice(p); return pr && p.flow > 0 ? pr / (p.flow / 1000) : Infinity; }
+  function statusOf(p) { return (S.marks[p.id] && S.marks[p.id].status) || "new"; }
+
+  function visible() {
+    let arr = S.places.filter((p) => {
+      const offers = p.offers.filter((o) => (o.area == null || o.area <= S.areaMax) && (!S.cat || (o.cat || "").includes(S.cat)));
+      if (!offers.length) return false;
+      if (S.noMall && p.notes.some((n) => n.startsWith("внутри"))) return false;
+      if (S.noYard && p.notes.some((n) => n.includes("со двора"))) return false;
+      const st = statusOf(p);
+      if (S.st === "") return st !== "reject";
+      if (S.st === "any") return true;
+      return st === S.st;
+    });
+    if (S.sort === "cost") arr = arr.slice().sort((a, b) => costPer1000(a) - costPer1000(b));
+    return arr;
+  }
+
+  function yandexMap(p) { return "https://yandex.ru/maps/?pt=" + p.lon + "," + p.lat + "&z=18&l=map"; }
+  function panorama(p) { return "https://yandex.ru/maps/?ll=" + p.lon + "," + p.lat + "&z=18&l=stv%2Csta&panorama%5Bpoint%5D=" + p.lon + "," + p.lat + "&panorama%5Bdirection%5D=0%2C0&panorama%5Bspan%5D=120%2C60"; }
+
+  function card(p) {
+    const tot = Math.max(1, p.fm + p.fb + p.fs);
+    const mark = S.marks[p.id] || {};
+    const st = mark.status || "new";
+    const chips = [];
+    if (p.bp) chips.push('<span class="chip bp" title="Отчёт BestPlace в объявлении на Авито">BestPlace: ' + fmt(p.bp) + " чел/час</span>");
+    if (p.metro) chips.push('<span class="chip">М ' + esc(p.metro) + " · " + fmt(p.mwalk) + " м пешком</span>");
+    if (p.stops) chips.push('<span class="chip">остановок рядом: ' + p.stops + "</span>");
+    for (const a of p.anchors.slice(0, 4)) chips.push('<span class="chip good">рядом ' + esc(a) + "</span>");
+    if (p.tob) chips.push('<span class="chip">табак в 200 м: ' + p.tob + (p.tobnear != null ? " (ближайший " + p.tobnear + " м)" : "") + "</span>");
+    if (p.flags.includes("first_line")) chips.push('<span class="chip good">первая линия</span>');
+    if (p.flags.includes("entrance_from_street")) chips.push('<span class="chip good">вход с улицы</span>');
+    if (p.flags.includes("showcase_windows")) chips.push('<span class="chip good">витрина</span>');
+    for (const n of p.notes) chips.push('<span class="chip warn">' + esc(n) + "</span>");
+    const offers = p.offers.map((o) => {
+      const bits = [o.area ? o.area + " м²" : null, o.cat, o.entrance, o.side].filter(Boolean).join(" · ");
+      return '<div class="offer"><div class="o1">' + esc(bits) + (o.desc ? '<details class="desc"><summary>описание</summary><p>' + esc(o.desc) + "</p></details>" : "") +
+        '</div><div class="o2"><span class="num">' + (o.price ? fmt(o.price) + (o.pq ? " ₽ (период не указан)" : " ₽/мес") : "цена не указана") + "</span><br>" +
+        (o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc(o.src) + " ↗</a>" : esc(o.src)) + "</div></div>";
+    }).join("");
+    const counts = (mark.counts || []).map((c) => "<b>" + fmt(c.perHour) + "/ч</b> (" + c.n + " за " + c.min + " мин, " + esc(c.at) + ")").join("; ");
+    const where = [p.street ? "фасад на " + p.street : null, p.btype ? "здание: " + p.btype : null].filter(Boolean).join(" · ");
+    return '<article class="card st-' + st + (S.hl === p.id ? " hl" : "") + '" id="c-' + p.id + '">' +
+      '<div class="head"><div class="rank">#' + p.rank + '</div><div><div class="addr">' + esc(p.addr) + '</div><div class="sub">' + esc(where || "улица не определена") + "</div></div>" +
+      '<div class="flow"><span class="n">' + fmt(p.flow) + '</span><span class="u">чел/сутки · модель</span></div></div>' +
+      '<div class="bar" title="Из чего складывается поток"><span class="m" style="width:' + (100 * p.fm / tot) + '%"></span><span class="b" style="width:' + (100 * p.fb / tot) + '%"></span><span class="s" style="width:' + (100 * p.fs / tot) + '%"></span></div>' +
+      '<div class="split"><span><i style="background:var(--metro)"></i>метро ' + fmt(p.fm) + '</span><span><i style="background:var(--bus)"></i>остановки ' + fmt(p.fb) + '</span><span><i style="background:var(--shop)"></i>магазины у дома ' + fmt(p.fs) + "</span>" + (p.mflow ? "<span>станция: " + fmt(p.mflow) + " пасс./сутки</span>" : "") + "</div>" +
+      '<div class="chips">' + chips.join("") + "</div>" +
+      '<div class="offers">' + offers + "</div>" +
+      '<div class="actions"><div class="status" role="group" aria-label="Статус">' +
+      STATUS.map(([k, t]) => '<button type="button" data-id="' + p.id + '" data-s="' + k + '" aria-pressed="' + (st === k) + '">' + t + "</button>").join("") + "</div>" +
+      '<input class="note" id="note-' + p.id + '" data-id="' + p.id + '" placeholder="Заметка: телефон, условия, впечатление" value="' + esc(mark.note || "") + '">' +
+      (counts ? '<div class="counts">Замеры: ' + counts + "</div>" : "") +
+      '<div class="links"><button type="button" class="onmap" data-onmap="' + p.id + '">На карте</button><a href="' + yandexMap(p) + '" target="_blank" rel="noopener">Карта ↗</a><a href="' + panorama(p) + '" target="_blank" rel="noopener">Панорама ↗</a>' +
+      '<button type="button" class="measure" data-measure="' + p.id + '">Замер</button></div></div></article>';
+  }
+
+  function render() {
+    const arr = visible();
+    const list = $("list");
+    if (!arr.length) { list.innerHTML = '<div class="empty">Под фильтр ничего не попало. Ослабьте фильтры слева.</div>'; drawMap(arr); return; }
+    const part = arr.slice(0, S.shown);
+    list.innerHTML = part.map(card).join("") + (arr.length > S.shown ? '<button type="button" class="more" id="more">Показать ещё (' + (arr.length - S.shown) + ")</button>" : "");
+    drawMap(arr);
+  }
+
+  // ---------- map ----------
+  // Leaflet + OpenStreetMap tiles; if Leaflet failed to load (offline, CDN blocked) fall back to the canvas outline map.
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  const LM = { map: null, layer: null, ring: null, fitted: false };
+  let drawMap = () => {};
+
+  function mixColor(a, b, t) {
+    const pa = parseHex(a), pb = parseHex(b);
+    if (!pa || !pb) return t > 0.6 ? b : a;
+    return "rgb(" + pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(",") + ")";
+  }
+  function parseHex(c) { const m = /^#([0-9a-f]{6})$/i.exec(c); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; }
+
+  function initLeaflet() {
+    const map = L.map("map", { preferCanvas: true, zoomControl: true, attributionControl: true, minZoom: 9, maxZoom: 19, tap: true });
+    map.setView([55.75, 37.62], 10);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    }).addTo(map);
+    map.attributionControl.setPrefix(false);
+    LM.map = map;
+    LM.renderer = L.canvas({ padding: 0.5, tolerance: 6 });
+    LM.layer = L.layerGroup().addTo(map);
+    new ResizeObserver(() => map.invalidateSize()).observe($("map"));
+    drawMap = drawLeaflet;
+  }
+
+  function drawLeaflet(arr) {
+    if (!S.data || !LM.map) return;
+    LM.layer.clearLayers();
+    const acc = css("--accent"), base = css("--muted"), ink = css("--ink"), surf = css("--surface");
+    const pts = arr.slice().sort((a, b) => a.flow - b.flow);
+    const nn = Math.max(1, pts.length - 1);
+    pts.forEach((p, i) => {
+      const t = i / nn;
+      const m = L.circleMarker([p.lat, p.lon], {
+        renderer: LM.renderer, radius: 2.5 + 4 * t * t, weight: 0.8, color: surf, opacity: 0.8,
+        fillColor: mixColor(base, acc, Math.min(1, t * 1.3)), fillOpacity: 0.35 + 0.55 * t,
+      });
+      m.bindTooltip("#" + p.rank + " · " + esc(p.addr) + "<br><b>" + fmt(p.flow) + "</b> чел/сутки", { direction: "top", offset: [0, -4] });
+      m.on("click", () => focusPlace(p.id));
+      m.addTo(LM.layer);
+    });
+    const h = S.hl && S.places.find((q) => q.id === S.hl);
+    if (h) L.circleMarker([h.lat, h.lon], { renderer: LM.renderer, radius: 11, weight: 2.5, color: ink, fill: false, interactive: false }).addTo(LM.layer);
+    if (!LM.fitted && pts.length) {
+      LM.fitted = true;
+      const top = pts.slice(-Math.min(pts.length, 200));
+      LM.map.fitBounds(L.latLngBounds(top.map((p) => [p.lat, p.lon])), { padding: [12, 12], maxZoom: 13, animate: false });
+    }
+  }
+
+  function initCanvas() {
+    const old = $("map");
+    const cv = document.createElement("canvas");
+    cv.id = "map"; cv.setAttribute("aria-label", old.getAttribute("aria-label"));
+    old.replaceWith(cv);
+    let mapPts = [];
+    drawMap = function (arr) {
+      if (!S.data) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = cv.clientWidth, h = cv.clientHeight;
+      if (!w || !h) return;
+      cv.width = w * dpr; cv.height = h * dpr;
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const lons = arr.map((p) => p.lon), lats = arr.map((p) => p.lat);
+      let x0 = 37.33, x1 = 37.89, y0 = 55.56, y1 = 55.92;
+      if (lons.length) { x0 = Math.min(x0, ...lons) - 0.01; x1 = Math.max(x1, ...lons) + 0.01; y0 = Math.min(y0, ...lats) - 0.01; y1 = Math.max(y1, ...lats) + 0.01; }
+      const kx = Math.cos(55.75 * Math.PI / 180);
+      const sx = (w - 12) / ((x1 - x0) * kx), sy = (h - 12) / (y1 - y0), s = Math.min(sx, sy);
+      const ox = (w - (x1 - x0) * kx * s) / 2, oy = (h - (y1 - y0) * s) / 2;
+      const proj = (lon, lat) => [ox + (lon - x0) * kx * s, oy + (y1 - lat) * s];
+      ctx.lineWidth = 1; ctx.strokeStyle = css("--line"); ctx.fillStyle = css("--surface");
+      for (const ring of S.data.outline) {
+        ctx.beginPath();
+        ring.forEach(([lo, la], i) => { const [x, y] = proj(lo, la); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      const acc = css("--accent"), base = css("--muted");
+      mapPts = [];
+      const pts = arr.slice().sort((a, b) => a.flow - b.flow);
+      const nn = Math.max(1, pts.length - 1);
+      pts.forEach((p, i) => {
+        const [x, y] = proj(p.lon, p.lat);
+        const t = i / nn;
+        ctx.globalAlpha = 0.25 + 0.75 * t;
+        ctx.fillStyle = t > 0.6 ? acc : base;
+        ctx.beginPath(); ctx.arc(x, y, 1.6 + 3 * t * t, 0, Math.PI * 2); ctx.fill();
+        mapPts.push([x, y, p.id]);
+      });
+      ctx.globalAlpha = 1;
+      if (S.hl) {
+        const p = S.places.find((q) => q.id === S.hl);
+        if (p) { const [x, y] = proj(p.lon, p.lat); ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke(); }
+      }
+    };
+    cv.addEventListener("click", (e) => {
+      const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      let best = null, bd = 400;
+      for (const [px, py, id] of mapPts) { const d = (px - x) ** 2 + (py - y) ** 2; if (d < bd) { bd = d; best = id; } }
+      if (best) focusPlace(best);
+    });
+    window.addEventListener("resize", () => drawMap(visible()));
+  }
+
+  if (window.L && L.map) { try { initLeaflet(); } catch (e) { initCanvas(); } } else initCanvas();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => drawMap(visible()));
+
+  function focusPlace(id) {
+    S.hl = id;
+    const arr = visible(); const idx = arr.findIndex((p) => p.id === id);
+    if (idx >= S.shown) S.shown = Math.ceil((idx + 1) / PAGE) * PAGE;
+    render();
+    const el = document.getElementById("c-" + id);
+    if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+
+  function showOnMap(id) {
+    const p = S.places.find((q) => q.id === id);
+    if (!p) return;
+    S.hl = id;
+    render();
+    if (LM.map) LM.map.setView([p.lat, p.lon], 16, { animate: false });
+    $("map").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  }
+  // floating "back to map" button for long lists on phones
+  const toTop = $("totop");
+  toTop.onclick = () => $("map").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  addEventListener("scroll", () => { toTop.hidden = $("map").getBoundingClientRect().bottom > 0; }, { passive: true });
+
+  // ---------- controls ----------
+  function syncControls() {
+    $("sort-flow").setAttribute("aria-pressed", S.sort === "flow");
+    $("sort-cost").setAttribute("aria-pressed", S.sort === "cost");
+    $("area").value = S.areaMax; $("area-v").textContent = S.areaMax + " м²";
+    $("cat").value = S.cat; $("st").value = S.st;
+    $("no-mall").setAttribute("aria-pressed", S.noMall);
+    $("no-yard").setAttribute("aria-pressed", S.noYard);
+  }
+  function changed() { S.shown = PAGE; saveFilters(); syncControls(); render(); }
+  $("sort-flow").onclick = () => { S.sort = "flow"; changed(); };
+  $("sort-cost").onclick = () => { S.sort = "cost"; changed(); };
+  $("area").oninput = (e) => { S.areaMax = +e.target.value; changed(); };
+  $("cat").onchange = (e) => { S.cat = e.target.value; changed(); };
+  $("st").onchange = (e) => { S.st = e.target.value; changed(); };
+  $("no-mall").onclick = () => { S.noMall = !S.noMall; changed(); };
+  $("no-yard").onclick = () => { S.noYard = !S.noYard; changed(); };
+
+  $("list").addEventListener("click", (e) => {
+    const t = e.target.closest("button");
+    if (!t) return;
+    if (t.id === "more") { S.shown += PAGE; render(); return; }
+    if (t.dataset.measure) { openCounter(t.dataset.measure); return; }
+    if (t.dataset.onmap) { showOnMap(t.dataset.onmap); return; }
+    if (t.dataset.s && t.dataset.id) {
+      const cur = statusOf({ id: t.dataset.id });
+      writeMark(t.dataset.id, { status: cur === t.dataset.s ? "new" : t.dataset.s });
+    }
+  });
+  const noteTimers = {};
+  $("list").addEventListener("input", (e) => {
+    const t = e.target;
+    if (!t.classList.contains("note")) return;
+    clearTimeout(noteTimers[t.dataset.id]);
+    noteTimers[t.dataset.id] = setTimeout(() => writeMark(t.dataset.id, { note: t.value.slice(0, 1000) }, true), 600);
+  });
+
+  // ---------- marks: localStorage + export/import ----------
+  let canStore = true;
+  function loadMarks() {
+    try {
+      const v = JSON.parse(localStorage.getItem(MARKS_KEY) || "{}");
+      return v && typeof v === "object" ? v : {};
+    } catch (e) { canStore = false; return {}; }
+  }
+  function saveMarks() {
+    try { localStorage.setItem(MARKS_KEY, JSON.stringify(S.marks)); return true; }
+    catch (e) { canStore = false; setSync(); return false; }
+  }
+  function markCount() { return Object.values(S.marks).filter((m) => (m.status && m.status !== "new") || m.note || (m.counts && m.counts.length)).length; }
+  function setSync(extra) {
+    const n = markCount();
+    const base = canStore
+      ? "Статусы хранятся в этом браузере" + (n ? " (отмечено адресов: " + n + ")" : "") + ". Для другого устройства — «Экспорт» здесь, «Импорт» там."
+      : "Браузер не даёт сохранять данные (частный режим?). Отметки пропадут после закрытия — сделайте «Экспорт».";
+    $("sync").textContent = extra ? extra + " " + base : base;
+  }
+  function writeMark(id, patch, quiet) {
+    S.marks[id] = Object.assign({}, S.marks[id] || {}, patch, { updated: new Date().toISOString() });
+    saveMarks();
+    if (!quiet) render();
+    setSync();
+  }
+
+  function sameCount(a, b) { return a.n === b.n && a.min === b.min && a.at === b.at; }
+  function mergeMark(cur, inc) {
+    if (!cur) return inc;
+    const newer = (inc.updated || "") > (cur.updated || "") ? inc : cur;
+    const older = newer === inc ? cur : inc;
+    const counts = (older.counts || []).slice();
+    for (const c of newer.counts || []) if (!counts.some((x) => sameCount(x, c))) counts.push(c);
+    const out = Object.assign({}, newer);
+    if (counts.length) out.counts = counts.slice(-12);
+    return out;
+  }
+
+  $("export").onclick = async () => {
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const body = JSON.stringify({ app: "trafik-u-dveri", version: 1, exported: d.toISOString(), marks: S.marks }, null, 1);
+    const name = "trafik-statusy-" + stamp + ".json";
+    const blob = new Blob([body], { type: "application/json" });
+    // On phones the share sheet is the easiest way to AirDrop / save to Files / send to yourself.
+    if (matchMedia("(pointer: coarse)").matches && navigator.canShare) {
+      try {
+        const file = new File([blob], name, { type: "application/json" });
+        if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); setSync("Экспорт готов."); return; }
+      } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    setSync("Файл " + name + " сохранён.");
+  };
+  $("import").onclick = () => $("import-file").click();
+  $("import-file").onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    let inc;
+    try {
+      if (f.size > 5e6) throw new Error("size");
+      const j = JSON.parse(await f.text());
+      inc = j && j.marks && typeof j.marks === "object" ? j.marks : j;
+      if (!inc || typeof inc !== "object" || Array.isArray(inc)) throw new Error("shape");
+    } catch (err) { setSync("Не получилось прочитать файл: нужен JSON из кнопки «Экспорт»."); return; }
+    let added = 0, updated = 0;
+    for (const [id, m] of Object.entries(inc)) {
+      if (!m || typeof m !== "object" || !/^[\w.-]{1,80}$/.test(id)) continue;
+      const clean = {};
+      if (typeof m.status === "string" && /^(new|fav|call|seen|reject)$/.test(m.status)) clean.status = m.status;
+      if (typeof m.note === "string") clean.note = m.note.slice(0, 1000);
+      if (Array.isArray(m.counts)) clean.counts = m.counts.filter((c) => c && typeof c.n === "number" && typeof c.perHour === "number").map((c) => ({ n: c.n, min: +c.min || 0, perHour: c.perHour, at: String(c.at || "").slice(0, 40) })).slice(-12);
+      if (typeof m.updated === "string") clean.updated = m.updated.slice(0, 40);
+      const before = JSON.stringify(S.marks[id] || null);
+      const next = mergeMark(S.marks[id], clean);
+      if (before === "null") added++; else if (JSON.stringify(next) !== before) updated++;
+      S.marks[id] = next;
+    }
+    saveMarks();
+    render();
+    setSync("Импорт: новых адресов " + added + ", обновлено " + updated + ".");
+  };
+  // keep several open tabs of the page in step
+  window.addEventListener("storage", (e) => { if (e.key === MARKS_KEY) { S.marks = loadMarks(); render(); setSync(); } });
+
+  // ---------- counter ----------
+  const C = { id: null, n: 0, t0: 0, timer: null };
+  function tick() {
+    const s = Math.floor((Date.now() - C.t0) / 1000);
+    $("ov-time").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    $("ov-rate").textContent = s >= 30 ? "≈ " + fmt(C.n * 3600 / s) + " чел/час" : "считаю…";
+  }
+  function openCounter(id) {
+    const p = S.places.find((q) => q.id === id);
+    C.id = id; C.n = 0; C.t0 = Date.now();
+    $("ov-addr").textContent = "Замер: " + (p ? p.addr : "");
+    $("ov-n").textContent = "0";
+    $("ov").hidden = false;
+    tick(); C.timer = setInterval(tick, 1000);
+    if (navigator.wakeLock) navigator.wakeLock.request("screen").then((l) => { C.lock = l; }).catch(() => {});
+  }
+  function closeCounter() { clearInterval(C.timer); $("ov").hidden = true; if (C.lock) { C.lock.release().catch(() => {}); C.lock = null; } }
+  $("ov-tap").addEventListener("pointerdown", (e) => { e.preventDefault(); C.n++; $("ov-n").textContent = C.n; });
+  $("ov-undo").onclick = () => { C.n = Math.max(0, C.n - 1); $("ov-n").textContent = C.n; };
+  $("ov-cancel").onclick = closeCounter;
+  $("ov-save").onclick = () => {
+    const sec = (Date.now() - C.t0) / 1000;
+    const id = C.id;
+    closeCounter();
+    if (sec < 30) { setSync("Замер короче 30 секунд не сохраняется."); return; }
+    const d = new Date();
+    const at = d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    const rec = { n: C.n, min: Math.round(sec / 6) / 10, perHour: Math.round(C.n * 3600 / sec), at };
+    const prev = (S.marks[id] && S.marks[id].counts) || [];
+    writeMark(id, { counts: prev.concat([rec]).slice(-12) });
+  };
+
+  // ---------- load ----------
+  S.marks = loadMarks();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  // offline copy of the page and the list (see sw.js)
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
+  setSync();
+  fetch("places.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
+    S.data = d; S.places = d.places;
+    const m = d.meta;
+    const src = Object.entries(m.sources).map(([k, v]) => k + " " + fmt(v)).join(", ");
+    $("meta").innerHTML = "Помещения до 70 м², 1-й этаж, Москва. Подходящих объявлений: <b>" + fmt(m.listings) + "</b> (" + esc(src) + "), это <b>" + fmt(m.addresses) + "</b> адресов. Ниже лучшие <b>" + fmt(m.shown) + "</b> по потоку у двери. Обновлено " + esc(m.built) + ".";
+    syncControls(); render(); setSync();
+  }).catch(() => {
+    $("list").innerHTML = '<div class="empty">Не удалось загрузить places.json. ' + (location.protocol === "file:" ? "Откройте страницу через веб-сервер (python3 -m http.server), а не двойным щелчком." : "Обновите страницу.") + "</div>";
+  });
+})();
+</script>
+</body>
+</html>
