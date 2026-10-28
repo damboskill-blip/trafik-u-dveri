@@ -131,6 +131,7 @@ select { border: 1px solid var(--line); background: var(--surface); border-radiu
 .offer .o2 { text-align: right; white-space: nowrap; }
 .offer a { color: var(--accent); text-decoration: none; font-weight: 600; }
 .offer a:hover { text-decoration: underline; }
+.offer .upd { font-size: 11px; color: var(--muted); }
 details.desc summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 details.desc p { margin: 6px 0 0; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
 .actions { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
@@ -324,7 +325,8 @@ details.method p, details.method li { font-size: 14px; max-width: 68ch; }
       const bits = [o.area ? o.area + " м²" : null, o.cat, o.entrance, o.side].filter(Boolean).join(" · ");
       return '<div class="offer"><div class="o1">' + esc(bits) + (o.desc ? '<details class="desc"><summary>описание</summary><p>' + esc(o.desc) + "</p></details>" : "") +
         '</div><div class="o2"><span class="num">' + (o.price ? fmt(o.price) + (o.pq ? " ₽ (период не указан)" : " ₽/мес") : "цена не указана") + "</span><br>" +
-        (o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc(o.src) + " ↗</a>" : esc(o.src)) + "</div></div>";
+        (o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc(o.src) + " ↗</a>" : esc(o.src)) +
+        (o.upd ? '<br><span class="upd">от ' + esc(o.upd.slice(8, 10) + "." + o.upd.slice(5, 7) + "." + o.upd.slice(2, 4)) + "</span>" : "") + "</div></div>";
     }).join("");
     const counts = (mark.counts || []).map((c) => "<b>" + fmt(c.perHour) + "/ч</b> (" + c.n + " за " + c.min + " мин, " + esc(c.at) + ")").join("; ");
     const where = [p.street ? "фасад на " + p.street : null, p.btype ? "здание: " + p.btype : null].filter(Boolean).join(" · ");
@@ -654,7 +656,7 @@ details.method p, details.method li { font-size: 14px; max-width: 68ch; }
     S.data = d; S.places = d.places;
     const m = d.meta;
     const src = Object.entries(m.sources).map(([k, v]) => k + " " + fmt(v)).join(", ");
-    $("meta").innerHTML = "Помещения до 70 м², 1-й этаж, Москва. Подходящих объявлений: <b>" + fmt(m.listings) + "</b> (" + esc(src) + "), это <b>" + fmt(m.addresses) + "</b> адресов. Ниже лучшие <b>" + fmt(m.shown) + "</b> по потоку у двери. Обновлено " + esc(m.built) + ".";
+    $("meta").innerHTML = "Помещения до 70 м², 1-й этаж, от 40 тыс. ₽ в месяц, Москва. Подходящих объявлений: <b>" + fmt(m.listings) + "</b> (" + esc(src) + "), это <b>" + fmt(m.addresses) + "</b> адресов. Ниже лучшие <b>" + fmt(m.shown) + "</b> по потоку у двери. Обновлено " + esc(m.built) + ".";
     syncControls(); render(); setSync();
   }).catch(() => {
     $("list").innerHTML = '<div class="empty">Не удалось загрузить places.json. ' + (location.protocol === "file:" ? "Откройте страницу через веб-сервер (python3 -m http.server), а не двойным щелчком." : "Обновите страницу.") + "</div>";

@@ -1,7 +1,7 @@
 // Offline copy of the site's own files: fetched network-first (updates arrive as soon as there is a
 // connection), served from cache when the network is down. Cross-origin requests (map tiles, Google
 // Fonts) are left to the browser: offline the map keeps its markers without the base layer.
-const CORE = "core-v3";
+const CORE = "core-v4";
 const PRECACHE = ["./", "index.html", "places.json", "manifest.json", "icon.svg", "icon-192.png", "apple-touch-icon.png",
   "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css", "vendor/leaflet/images/layers.png"];
 
